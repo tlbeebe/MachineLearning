@@ -1,129 +1,182 @@
-%1.
-%load images
-sampletest = reshape(im2double(imread('sampletest.png')),784,1);
-sampletrain = reshape(im2double(imread('sampletrain.png')),784,1);
-
-%calculate most-likely estimate of 'a' for sample images using
-%x = (x'*cov^-1*x)^-1*x'*cov^-1*x where cov = I from problem 2
-aML = (sampletrain.'*sampletrain)^-1*sampletrain.'*sampletest;
-
-%2.
-%load in data
-load('data.mat');
-
-%calculate aML between training images, normalize by a, and calculate
-%the euclidean distance.
-%find the smallest and set that as the label for that image
-classified = zeros(500,1);
-totalErrorNum = 0;
-for i = 1:500
-    euclidians = zeros(5000,1);
-    for j = 1:5000
-        %reshape images
-        testImage = reshape(imageTestNew(:,:,i),784,1);
-        trainImage = reshape(imageTrain(:,:,j),784,1);
-        %calculate MLE of a between 2 images
-        astar = (trainImage.'*trainImage)^-1*trainImage.'*trainImage;
-        %normalize test image (getes rid of amplification)
-        normalTest = testImage / astar;
-        %calculate euclidean distance
-        euclideans(j) = norm(trainImage - normalTest);
-    end
-    %find min euclidean distance
-    [val,minIndex] = min(euclideans);
-    %classify test images
-    classified(i) = labelTrain(minIndex);
-    %calculate total number of error
-    if classified(i) ~= labelTestNew(i)
-        totalErrorNum = totalErrorNum + 1;
-    end
-end
-
-%error
-totalError = totalErrorNum/500;
-
-errorPerClass = zeros(10,1);
-for i = 1:10
-    count = 0;
-    errorCount = 0;
-    for j = 1:500
-        if labelTestNew(j) == i-1
-            count = count + 1;
-            if labelTestNew(j) ~= classified(j)
-                errorCount = errorCount + 1;
-            end
-        end
-    end
-    errorPerClass(i) = errorCount/count;
-end
-
-%total error
-totalErrorNum = totalErrorNum/500;
-
-errorPerClass = zeros(10,1);
-for i = 1:10
-    count = 0;
-    errorCount = 0;
-    for j = 1:500
-        if labelTestNew(j) == i-1
-            count = count + 1;
-            if labelTestNew(j) ~= classified(j)
-                errorCount = errorCount + 1;
-            end
-        end
-    end
-    errorPerClass(i) = errorCount / count;
-end
-
-%plot error per class
-figure;
-bar([0,1,2,3,4,5,6,7,8,9],errorPerClass);
-xlabel('Class')
-ylabel('P(Error|Class)')
-ylim([0,0.45]);
-
-%nearest-neighbor classifier from HW2
-
-dist = zeros(5000,500);
-for i = 1:500
-    for j = 1:5000
-       diff = imageTrain(:,:,j) - imageTestNew(:,:,i);
-       square = diff.^2;
-       total = sum(sum(square));
-       root = total^0.5;
-       dist(j,i) = root;
-    end
-end
-
-nnclass = zeros(500,1);
-nnminindex = zeros(500,1);% contains index of min distance for each test image
-for i=1:500
-    x = find(dist(:,i) == min(dist(:,i)));
-    nnminindex(i)=x;
-    nnclass(i) = labelTrain(x);
-end
-
-NNPgC = zeros(1,10);
-NNPE = 0;
-for c = 0:9
-    x = find(labelTestNew==c);
-    total = length(x);
-    nnerrorcount = 0;
-    nntotalerrorcount = 0;
-    for i=1:500
-       if (labelTestNew(i)==c) && (nnclass(i) ~= labelTestNew(i))
-           nnerrorcount = nnerrorcount + 1;
+%Step 1: Load the images and labels, create placeholder variables
+load("data.mat");
+%load("label.mat");
+distMat = zeros(28,28);
+labelResults = zeros(500,1);
+closestImg = zeros(500,1);
+errorNums = zeros(10,1); %Store number of errors
+correctNums = zeros(10,1); %Store number correct
+errorCalc = zeros(10,1); %Store error percent values
+errorImages = zeros(5,1); %Store the first 5 error image values
+double distance;
+double euclid;
+double bestAvg;
+double labelVal;
+double totalError;
+double errorImVal;
+double bestDist;
+double a_P1; %This variable is the value of a for part 1
+double a_im; %This is the value of a for each image
+double lSquares; %This is used for calculating the least squares distance
+labelVal = 0;
+distance = 0;
+a_P1 = 0;
+a_im = 0;
+bestDist = 200000; %initiate with highest possible pixel value
+errorImVal = 1; %Use to count number of error images
+%Now load images for part 1, convert to doubles, and reshape
+% In order to receive 1 value for a
+sampleTest = imread("sampletest.png");
+sampleTrain = imread("sampletrain.png");
+sampleTest = im2double(sampleTrain);
+sampleTrain = im2double(sampleTest);
+sampleTest = reshape(sampleTest, 784, 1);
+sampleTrain = reshape(sampleTrain, 784, 1);
+%Problem 1: Calculate the ML estimate of parameter 'a'
+% Θ=[(x^T)x]^-1 * x^T * y where x is train image y is test image
+a_P1 = inv(transpose(sampleTrain) * sampleTrain) * transpose(sampleTrain) * sampleTest;
+%Step 2: Distance the test image values at each pixel to the values
+       % of all the pixels in the training images
+       % e.g. imageTest(1,20,4) vs imageTrain(1,20, i) 1 <= i <= 5000
+%For this assignment, we'll be adding a step where we find the 'a' for each
+%image pair as well
+for i = 1:500 %Loops through the test images
+   for j = 1:5000 %Loops through the training images
+       %for u = 1:784 %Loops through the rows
+           %for v = 1:28 %Loops through the columns
+               %reshape the images to find a
+               imageTest = reshape(imageTestNew(:,:,i), 784, 1);
+               imageTrainee = reshape(imageTrain(:,:,j), 784, 1);
+               a_im = inv(transpose(imageTrainee) * imageTrainee) * transpose(imageTrainee) * imageTest;
+              
+               for u = 1:784
+                   %Begin least squares (y/a - x)^2
+                   lSquares = imageTest(u,1) / a_im;
+                   lSquares = (lSquares - imageTrainee(u,1))^2;
+                   distance = lSquares + distance;
+               end
+               %Implement Euclidean distance
+               %euclid = imageTest(u,v,i) - imageTrain(u,v,j);
+               %euclid = euclid ^ 2;
+               %distance = distance + euclid;
+           %end
+       %end
+       distance = sqrt(distance); %Taking sqrt of the sum of dist squares
+       if distance < bestDist %New average value is lower than best
+           labelResults(i,1) = labelTrain(j,1); %Copy label from test img
+           closestImg(i,1) = j; %Store NN img # for part 3
+           bestDist = distance; %Store new record low avg #
        end
-       if (nnclass(i)~=labelTestNew(i))
-           nntotalerrorcount = nntotalerrorcount + 1;
-       end
-    end
-    NNPgC(c+1)=nnerrorcount/total;
-    NNPE = nntotalerrorcount/500;
+      
+       distance = 0; %Reset the square distance counter for next train image
+   end
+   bestDist = 200000; %Reset best average counter for new test image
 end
+%Step 4: Once every image is tested, find error count
+for i = 1:500
+   if labelResults(i,1) == labelTestNew(i,1) %If correct guess
+       labelVal = labelTestNew(i,1) + 1; %Matrices start at 1, not 0
+       correctNums(labelVal,1) = correctNums(labelVal,1) + 1;
+   end
+   if labelResults(i,1) ~= labelTestNew(i,1) %If incorrect guess
+       if errorImVal <= 5 %Grab 5 error images for comparison
+           errorImages(errorImVal,1) = i;
+           errorImVal = errorImVal + 1;
+       end
+       labelVal = labelTestNew(i,1) + 1;  %Offput because matrix starts at 1
+       errorNums(labelVal,1) = errorNums(labelVal,1) + 1;
+   end
+end
+%Step 5: For problem 1, plot error rates by image class
+for i = 1:10 %Add to find the total number of images per image class
+   errorCalc(i,1) = correctNums(i,1) + errorNums(i,1);
+end
+for i = 1:10 %Divide number of errors by total
+   errorCalc(i,1) = errorNums(i,1) / errorCalc(i,1);
+end
+x = 0:1:9; %Specifies x values for graph due to matrix offput by 1
+bar(x,errorCalc) %Creates the bar graph
+disp(errorCalc) %Prints the values of errorCalc
+%Step 6: For problem 2, find total error rate
+totalError = sum(errorCalc); %Add all error values together
+totalError = totalError/10; %Divide them by 10, the number of digits
+disp(totalError); %Prints the value totalError
 
-figure;
-bar(0:9,NNPgC)
-xlabel('NN Class')
-ylabel('P(error|Class)')
-%}
+
+Code for Problem 3 (modified code for euclidean distance):
+
+
+%Step 1: Load the images and labels, create placeholder variables
+load("data.mat");
+%load("label.mat");
+distMat = zeros(28,28);
+labelResults = zeros(500,1);
+closestImg = zeros(500,1);
+errorNums = zeros(10,1); %Store number of errors
+correctNums = zeros(10,1); %Store number correct
+errorCalc = zeros(10,1); %Store error percent values
+errorImages = zeros(5,1); %Store the first 5 error image values
+double distance;
+double euclid;
+double bestAvg;
+double labelVal;
+double totalError;
+double errorImVal;
+double bestDist;
+labelVal = 0;
+distance = 0;
+bestDist = 200000; %initiate with highest possible pixel value
+errorImVal = 1; %Use to count number of error images
+%Step 2: Distance the test image values at each pixel to the values
+       % of all the pixels in the training images
+       % e.g. imageTest(1,20,4) vs imageTrain(1,20, i) 1 <= i <= 5000
+for i = 1:500 %Loops through the test images
+   for j = 1:5000 %Loops through the training images
+       for u = 1:28 %Loops through the rows
+           for v = 1:28 %Loops through the columns
+               %Implement Euclidean distance
+               euclid = imageTestNew(u,v,i) - imageTrain(u,v,j);
+               euclid = euclid ^ 2;
+               distance = distance + euclid;
+           end
+       end
+       distance = sqrt(distance); %Taking sqrt of the total distance squares
+       if distance < bestDist %New average value is lower than best
+           labelResults(i,1) = labelTrain(j,1); %Copy label from test img
+           closestImg(i,1) = j; %Store NN img # for part 3
+           bestDist = distance; %Store new record low avg #
+       end
+      
+       distance = 0; %Reset the square distance counter for next train image
+   end
+   bestDist = 200000; %Reset best average counter for new test image
+end
+%Step 4: Once every image is tested, find error count
+for i = 1:500
+   if labelResults(i,1) == labelTestNew(i,1) %If correct guess
+       labelVal = labelTestNew(i,1) + 1; %Matrices start at 1, not 0
+       correctNums(labelVal,1) = correctNums(labelVal,1) + 1;
+   end
+   if labelResults(i,1) ~= labelTestNew(i,1) %If incorrect guess
+       if errorImVal <= 5 %Grab 5 error images for comparison
+           errorImages(errorImVal,1) = i;
+           errorImVal = errorImVal + 1;
+       end
+       labelVal = labelTestNew(i,1) + 1;  %Offput because matrix starts at 1
+       errorNums(labelVal,1) = errorNums(labelVal,1) + 1;
+   end
+end
+%Step 5: For problem 1, plot error rates by image class
+for i = 1:10 %Add to find the total number of images per image class
+   errorCalc(i,1) = correctNums(i,1) + errorNums(i,1);
+end
+for i = 1:10 %Divide number of errors by total
+   errorCalc(i,1) = errorNums(i,1) / errorCalc(i,1);
+end
+x = 0:1:9; %Specifies x values for graph due to matrix offput by 1
+bar(x,errorCalc) %Creates the bar graph
+disp(errorCalc); %Prints the values of errorCalc
+%Step 6: For problem 2, find total error rate
+totalError = sum(errorCalc); %Add all error values together
+totalError = totalError/10; %Divide them by 10, the number of digits
+disp(totalError); %Prints the value totalError
